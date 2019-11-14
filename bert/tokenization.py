@@ -23,6 +23,7 @@ import unicodedata
 import six
 import tensorflow as tf
 
+from pre_process import preprocess
 
 def convert_to_unicode(text):
   """Converts `text` to Unicode (if it's not already), assuming utf-8 input."""
@@ -145,6 +146,7 @@ class BasicTokenizer(object):
   def tokenize(self, text):
     """Tokenizes a piece of text."""
     text = convert_to_unicode(text)
+    text = preprocess(text)
     text = self._clean_text(text)
 
     # This was added on November 1st, 2018 for the multilingual and Chinese
