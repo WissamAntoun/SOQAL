@@ -2,16 +2,24 @@
 import re
 import pyarabic.araby as araby
 #%%
-# from py4j.java_gateway import JavaGateway
+from py4j.java_gateway import JavaGateway
 
-# gateway = JavaGateway.launch_gateway(classpath='farasa_segmenter/FarasaSegmenterJar.jar')
-# farasa = gateway.jvm.com.qcri.farasa.segmenter.Farasa()
+gateway = JavaGateway.launch_gateway(classpath='C:\\Users\\User\\Desktop\\bert pretrain\\FarasaSegmenterJar.jar')
+farasa = gateway.jvm.com.qcri.farasa.segmenter.Farasa()
+#%%
+
+prefix_list = ["ال", "و", "ف", "ب", "ك", "ل", "لل", "\u0627\u0644", "\u0648", "\u0641", "\u0628", "\u0643", "\u0644", "\u0644\u0644", "س"]
+suffix_list = ["ه", "ها", "ك", "ي", "هما", "كما", "نا", "كم", "هم", "هن", "كن",
+                 "ا", "ان", "ين", "ون", "وا", "ات", "ت", "ن", "ة"
+                "\u0647", "\u0647\u0627", "\u0643", "\u064a", "\u0647\u0645\u0627", "\u0643\u0645\u0627", "\u0646\u0627", "\u0643\u0645", "\u0647\u0645", "\u0647\u0646", "\u0643\u0646",
+                "\u0627", "\u0627\u0646", "\u064a\u0646", "\u0648\u0646", "\u0648\u0627", "\u0627\u062a", "\u062a", "\u0646", "\u0629" ]
+
+
 regex_url = r'(http(s)?:\/\/.)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)'
 regex_mention = r'@[\w\d]+'
 regex_email = r'\S+@\S+'
 redundant_punct_pattern = r'([!\"#\$%\'\(\)\*\+,\.:;\-<=·>?@\[\\\]\^_ـ`{\|}~—٪’،؟`୍“؛”ۚ【»؛\s+«–…‘]{2,})'
-
-
+#%%
 
 def remove_elongation(word):
 	"""
@@ -30,24 +38,28 @@ def remove_elongation(word):
 			break
 	return word
 
+#%%
 
-def tokenize_arabic_words(line_input):
-	tokenized_line_input = list()
-	tokens = line_input.split()
-	for token in tokens:
-		if token.startswith('و') or token.startswith('ل') or token.startswith('ب') or token.startswith('ف'):
-			token_split = list(farasa.segmentLine(token))
-			token_ = token_split[0].split('+')
-			if token_[0] in ['و', 'ل', 'ب', 'ف']:
-				while token_[0] in ['و', 'ل', 'ب', 'ف'] and len(token_) > 2:
-					token_[-2:] = [''.join(token_[-2:])]
-				token_ = ' '.join(token_)
-			else:
-				token_ = ''.join(token_)
-			tokenized_line_input.append(token_)
-		else:
-			tokenized_line_input.append(token)
-	return ' '.join(tokenized_line_input)
+def tokenize_arabic_words_farasa(line_input):
+    segmented_line=[]
+    line_farasa = farasa.segmentLine(line_input)
+    for index , word in enumerate(line_farasa):
+        if word in ['[',']']:
+            continue
+        if word in ['رابط','بريد','مستخدم'] and line_farasa[index-1] in ['[',']']:
+            segmented_line.append('['+word+']')
+            continue
+        segmented_word=[]
+        for token in word.split('+'):
+            if token in prefix_list:
+                segmented_word.append(token+'+')
+            elif token in suffix_list:
+                segmented_word.append('+'+token)
+            else:
+                segmented_word.append(token)
+        segmented_line.extend(segmented_word)
+
+    return ' '.join(segmented_line)
 
 
 def remove_redundant_punct(text):
@@ -65,24 +77,26 @@ def remove_redundant_punct(text):
 	text = re.sub(r'\s+', ' ', text)
 	return text.strip()
 
+#%%
 
-def preprocess(text):
+def preprocess(text, do_farasa_tokenization=False):
 	text=str(text)
 	processing_tweet = araby.strip_tashkeel(text)
 	processing_tweet = re.sub(r'\d+\/[ء-ي]+\/\d+\]', '', processing_tweet)
-	processing_tweet = re.sub(r'\d+([,\d]+)?', '[رقم]', processing_tweet)
+	#processing_tweet = re.sub(r'\d+([,\d]+)?', '[رقم]', processing_tweet)
 	processing_tweet = re.sub('ـ', '', processing_tweet)
 	processing_tweet = re.sub(regex_url, '[رابط]', processing_tweet)
-	processing_tweet = re.sub(regex_email, '[بريد إلكتروني]', processing_tweet)
+	processing_tweet = re.sub(regex_email, '[بريد]', processing_tweet)
 	processing_tweet = re.sub(regex_mention, '[مستخدم]', processing_tweet)
 	processing_tweet = re.sub('…', r'\.', processing_tweet).strip()
 	processing_tweet = remove_redundant_punct(processing_tweet)
 
-	processing_tweet = re.sub(r'\[ رقم \]|\[رقم \]|\[ رقم\]', ' [رقم] ', processing_tweet)
+	#processing_tweet = re.sub(r'\[ رقم \]|\[رقم \]|\[ رقم\]', ' [رقم] ', processing_tweet)
 	processing_tweet = re.sub(r'\[ رابط \]|\[ رابط\]|\[رابط \]', ' [رابط] ', processing_tweet)
-	processing_tweet = re.sub(r'\[ بريد إلكتروني \]|\[ بريد إلكتروني\]|\[بريد إلكتروني \]', ' [بريد إلكتروني] ', processing_tweet)
+	processing_tweet = re.sub(r'\[ بريد \]|\[ بريد\]|\[بريد \]', ' [بريد] ', processing_tweet)
 	processing_tweet = re.sub(r'\[ مستخدم \]|\[ مستخدم\]|\[مستخدم \]', ' [مستخدم] ', processing_tweet)
 
 	processing_tweet = remove_elongation(processing_tweet)
-	# processing_tweet = tokenize_arabic_words(processing_tweet)
+	if do_farasa_tokenization:
+	 processing_tweet = tokenize_arabic_words_farasa(processing_tweet)
 	return processing_tweet.strip()
